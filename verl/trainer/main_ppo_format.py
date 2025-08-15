@@ -17,7 +17,7 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 
 from verl import DataProto
 import torch
-from verl.utils.reward_score import qa_em, qa_em_format
+from verl.utils.reward_score import qa_em, qa_em_format, llm_score
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 import re
 import numpy as np
