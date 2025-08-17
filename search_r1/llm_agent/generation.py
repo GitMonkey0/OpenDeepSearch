@@ -170,7 +170,8 @@ class LLMGenerationManager:
         output_ids_list = []
 
         cur_input_ids = init_input_ids.clone()
-        for step in range(self.config.max_turns + 1):
+        max_turns = self.config.max_turns if ground_truth is not None else self.config.max_turns * 2
+        for step in range(max_turns + 1):
             if not active_mask.sum():
                 break
             cur_input_ids = cur_input_ids[:, -self.config.max_prompt_length:]
@@ -284,7 +285,10 @@ class LLMGenerationManager:
             reflect_output_ids = self.tensor_fn.concatenate_with_padding(output_ids_list, pad_to_left=False)
             reflect_output_ids = self._cut_to_effective_len(reflect_output_ids, cut_off="right")
 
-        final_output_ids = self.tensor_fn.concatenate_with_padding([output_ids, reflect_output_ids], pad_to_left=False)
+            final_output_ids = self.tensor_fn.concatenate_with_padding([output_ids, reflect_output_ids], pad_to_left=False)
+        else:
+            final_output_ids = output_ids, reflect_output_ids
+            
         final_output_ids = self._cut_to_effective_len(final_output_ids, cut_off="right")
 
         final_batch = DataProto.from_dict({k: v[:, :0] for k, v in gen_batch.batch.items()})

@@ -74,14 +74,13 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo_format \
     trainer.test_freq=100 \
     trainer.project_name=$WAND_PROJECT \
     trainer.experiment_name=$EXPERIMENT_NAME \
-    trainer.total_epochs=15 \
-    trainer.total_training_steps=1005 \
+    trainer.total_epochs=1 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=/home/peterjin/verl_checkpoints/$EXPERIMENT_NAME \
     reward_model.structure_format_score=0.2 \
     reward_model.final_format_score=0.1 \
     reward_model.retrieval_score=0 \
-    max_turns=8 \
+    max_turns=4 \
     retriever.url="http://127.0.0.1:8000/retrieve" \
     retriever.topk=3 \
     2>&1 | tee /home/peterjin/rl_logs/$EXPERIMENT_NAME.log
