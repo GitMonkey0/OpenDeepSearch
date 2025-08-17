@@ -50,7 +50,7 @@ class LLMGenerationManager:
             add_special_tokens=False, 
             return_tensors='pt', 
             padding="longest"
-        )['input_ids']
+        )['input_ids'].long()
 
     def _postprocess_responses(self, responses: torch.Tensor) -> torch.Tensor:
         """Process responses to stop at search operation or answer operation."""
@@ -194,7 +194,7 @@ class LLMGenerationManager:
             responses_ids = self._cut_to_effective_len(responses_ids, cut_off="right")
 
             next_obs, dones, valid_action, is_search = self.execute_predictions(
-                responses_str, active_mask, do_search=step!=self.config.max_turns
+                responses_str, active_mask, do_search=step!=max_turns
             )
             next_obs_ids = self._process_next_obs(next_obs)
             next_obs_ids = self._cut_to_effective_len(next_obs_ids, cut_off="right")
@@ -287,7 +287,7 @@ class LLMGenerationManager:
 
             final_output_ids = self.tensor_fn.concatenate_with_padding([output_ids, reflect_output_ids], pad_to_left=False)
         else:
-            final_output_ids = output_ids, reflect_output_ids
+            final_output_ids = output_ids
             
         final_output_ids = self._cut_to_effective_len(final_output_ids, cut_off="right")
 
@@ -354,7 +354,7 @@ class LLMGenerationManager:
         out = torch.full((output_ids.size(0), max_len), pad_id,
                         dtype=torch.long)
         for i, ids in enumerate(new_ids):
-            out[i, :len(ids)] = torch.tensor(ids, dtype=torch.long, device=out.device)
+            out[i, :len(ids)] = torch.tensor(ids, dtype=torch.long)
         return out
 
     def _create_info_mask(self, final_batch: DataProto) -> torch.Tensor:
