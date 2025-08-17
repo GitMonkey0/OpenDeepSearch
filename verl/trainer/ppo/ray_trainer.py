@@ -721,15 +721,11 @@ class RayPPOTrainer(object):
                 ####################
                 # with _timer('step', timing_raw):
                     else:
-                        breakpoint()
-                        # first_input_ids = gen_batch.batch['input_ids'][:, -gen_config.max_start_length:].clone().long()
-
                         with _timer('gen', timing_raw):
                             generation_manager.timing_raw = timing_raw
                             final_gen_batch_output = generation_manager.run_llm_loop(
                                 gen_batch=gen_batch,
-                                # initial_input_ids=first_input_ids,
-                                # ground_truth=batch.non_tensor_batch.get('ground_truth', None),
+                                ground_truth=batch.non_tensor_batch.get('golden_answers', None),
                             )
 
                         # final_gen_batch_output.batch.apply(lambda x: x.long(), inplace=True)
@@ -748,6 +744,11 @@ class RayPPOTrainer(object):
                         batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                         batch = batch.union(final_gen_batch_output)
 
+                    ####################
+                    ####################
+
+                    with _timer('reflect', timing_raw):
+                        reward_tensor = self.reward_fn(batch)
                     ####################
                     ####################
 
