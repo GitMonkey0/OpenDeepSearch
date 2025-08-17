@@ -230,61 +230,59 @@ class LLMGenerationManager:
         #######################################################################
         if ground_truth is not None:
             reflect_mask = self._create_reflect_mask(cur_input_ids, ground_truth)
-            output_ids = self._create_reflect_token(output_ids, reflect_mask)
-        else:
-            reflect_mask = torch.ones(batch_size, dtype=torch.bool)
-
-        cur_input_ids = self.tensor_fn.concatenate_with_padding([
-            init_input_ids,
-            output_ids
-        ])
-        reflect_output_ids_list = []
-        for step in range(self.config.max_turns + 1):
-            if not reflect_mask.sum():
-                break
-            cur_input_ids = cur_input_ids[:, -self.config.max_prompt_length:]
-            cur_input_ids = self._cut_to_effective_len(cur_input_ids, cut_off="left")
-
-            inputs = DataProto.from_dict({
-                'input_ids': cur_input_ids,
-                'attention_mask': self.tensor_fn.create_attention_mask(cur_input_ids),
-                'position_ids': self.tensor_fn.create_position_ids(self.tensor_fn.create_attention_mask(cur_input_ids))
-            })
-
-            inputs = DataProto.from_dict({
-                k: v[reflect_mask] for k, v in inputs.batch.items()
-            })       
-
-            outputs = self._generate_with_gpu_padding(inputs)
-
-            responses_ids, responses_str = self._postprocess_responses(outputs.batch['responses'])  
-            responses_ids, responses_str = self.tensor_fn._example_level_pad(responses_ids, responses_str, reflect_mask)
-            responses_ids = self._cut_to_effective_len(responses_ids, cut_off="right")
-
-            next_obs, dones, valid_action, is_search = self.execute_predictions(
-                responses_str, reflect_mask, do_search=step!=self.config.max_turns
-            )
-            next_obs_ids = self._process_next_obs(next_obs)
-            next_obs_ids = self._cut_to_effective_len(next_obs_ids, cut_off="right")
-
-            cur_output_ids = self.tensor_fn.concatenate_with_padding([
-                responses_ids,
-                next_obs_ids
-            ], pad_to_left=False)  if step!=self.config.max_turns else responses_ids
-            cur_output_ids = self._cut_to_effective_len(cur_output_ids, cut_off="right")
-            reflect_output_ids_list.append(cur_output_ids)
+            output_ids = self._create_reflect(output_ids, reflect_mask)
 
             cur_input_ids = self.tensor_fn.concatenate_with_padding([
-                cur_input_ids,
-                cur_output_ids
+                init_input_ids,
+                output_ids
             ])
-            cur_input_ids = self._cut_to_effective_len(cur_input_ids, cut_off="left")
+            reflect_output_ids_list = []
+            for step in range(self.config.max_turns + 1):
+                if not reflect_mask.sum():
+                    break
+                cur_input_ids = cur_input_ids[:, -self.config.max_prompt_length:]
+                cur_input_ids = self._cut_to_effective_len(cur_input_ids, cut_off="left")
 
-            curr_reflect_mask = torch.tensor([not done for done in dones], dtype=torch.bool)
-            reflect_mask = reflect_mask * curr_reflect_mask
+                inputs = DataProto.from_dict({
+                    'input_ids': cur_input_ids,
+                    'attention_mask': self.tensor_fn.create_attention_mask(cur_input_ids),
+                    'position_ids': self.tensor_fn.create_position_ids(self.tensor_fn.create_attention_mask(cur_input_ids))
+                })
 
-        reflect_output_ids = self.tensor_fn.concatenate_with_padding(output_ids_list, pad_to_left=False)
-        reflect_output_ids = self._cut_to_effective_len(reflect_output_ids, cut_off="right")
+                inputs = DataProto.from_dict({
+                    k: v[reflect_mask] for k, v in inputs.batch.items()
+                })       
+
+                outputs = self._generate_with_gpu_padding(inputs)
+
+                responses_ids, responses_str = self._postprocess_responses(outputs.batch['responses'])  
+                responses_ids, responses_str = self.tensor_fn._example_level_pad(responses_ids, responses_str, reflect_mask)
+                responses_ids = self._cut_to_effective_len(responses_ids, cut_off="right")
+
+                next_obs, dones, valid_action, is_search = self.execute_predictions(
+                    responses_str, reflect_mask, do_search=step!=self.config.max_turns
+                )
+                next_obs_ids = self._process_next_obs(next_obs)
+                next_obs_ids = self._cut_to_effective_len(next_obs_ids, cut_off="right")
+
+                cur_output_ids = self.tensor_fn.concatenate_with_padding([
+                    responses_ids,
+                    next_obs_ids
+                ], pad_to_left=False)  if step!=self.config.max_turns else responses_ids
+                cur_output_ids = self._cut_to_effective_len(cur_output_ids, cut_off="right")
+                reflect_output_ids_list.append(cur_output_ids)
+
+                cur_input_ids = self.tensor_fn.concatenate_with_padding([
+                    cur_input_ids,
+                    cur_output_ids
+                ])
+                cur_input_ids = self._cut_to_effective_len(cur_input_ids, cut_off="left")
+
+                curr_reflect_mask = torch.tensor([not done for done in dones], dtype=torch.bool)
+                reflect_mask = reflect_mask * curr_reflect_mask
+
+            reflect_output_ids = self.tensor_fn.concatenate_with_padding(output_ids_list, pad_to_left=False)
+            reflect_output_ids = self._cut_to_effective_len(reflect_output_ids, cut_off="right")
 
         final_output_ids = self.tensor_fn.concatenate_with_padding([output_ids, reflect_output_ids], pad_to_left=False)
         final_output_ids = self._cut_to_effective_len(final_output_ids, cut_off="right")
@@ -334,24 +332,25 @@ class LLMGenerationManager:
 
         return reflect_mask
     
-    def _create_reflect_token(self, input_ids: torch.Tensor, reflect_mask: torch.Tensor) -> torch.Tensor:
+    def _create_reflect(self, output_ids: torch.Tensor, reflect_mask: torch.Tensor) -> torch.Tensor:
         """
         Create a token for the reflect phase.
         """
-        reflect_ids = self.tokenizer('\n<reflect>\nMaybe I should think, search and answer again?\n</reflect>\n', add_special_tokens=False).input_ids  # list[int]，长度 3
-        reflect_ids = torch.tensor(reflect_ids, dtype=torch.long, device=reflect_mask.device)
+        reflect_str = '\n<reflect>\nMaybe I should think, search and answer again?\n</reflect>\n'
+        decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
-        # pad token id
+        new_ids = []
         pad_id = self.tokenizer.pad_token_id
+        for text, mask in zip(decoded, reflect_mask):
+            if mask:
+                text = re.sub(r'<answer>.*?</answer>\s*$', '', text, flags=re.DOTALL) + reflect_str
+            new_ids.append(self.tokenizer.encode(text, add_special_tokens=False))
 
-        batch_size = reflect_mask.size(0)
-        len_reflect = len(reflect_ids)
-        out = torch.full((batch_size, len_reflect), pad_id,
-                        dtype=torch.long, device=reflect_mask.device)
-
-        out[reflect_mask] = reflect_ids
-        out = self.tensor_fn.concatenate_with_padding([input_ids, out])
-
+        max_len = max(len(ids) for ids in new_ids)
+        out = torch.full((output_ids.size(0), max_len), pad_id,
+                        dtype=torch.long)
+        for i, ids in enumerate(new_ids):
+            out[i, :len(ids)] = torch.tensor(ids, dtype=torch.long, device=out.device)
         return out
 
     def _create_info_mask(self, final_batch: DataProto) -> torch.Tensor:
