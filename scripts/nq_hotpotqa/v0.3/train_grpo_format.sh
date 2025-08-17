@@ -5,8 +5,8 @@ export DATA_DIR=data/${data_name} # first download the data from https://hugging
 
 WAND_PROJECT="Search-R1"
 
-export BASE_MODEL='Qwen/Qwen2.5-3B'
-export EXPERIMENT_NAME=${data_name}-search-r1-grpo-qwen2.5-3b-em-structureformat
+export BASE_MODEL='../../ckpt/Qwen/Qwen2.5-3B-Instruct'
+export EXPERIMENT_NAME=${data_name}-search-r1-grpo-qwen2.5-3b-it-em-structureformat
 # export BASE_MODEL='Qwen/Qwen2.5-3B-Instruct'
 # export EXPERIMENT_NAME=${data_name}-search-r1-grpo-qwen2.5-3b-it-em-structureformat
 # export BASE_MODEL='Qwen/Qwen2.5-7B'
