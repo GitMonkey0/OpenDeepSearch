@@ -237,7 +237,6 @@ class LLMGenerationManager:
                 init_input_ids,
                 output_ids
             ])
-            breakpoint()
             reflect_output_ids_list = []
             for step in range(self.config.max_turns + 1):
                 if not reflect_mask.sum():
@@ -311,7 +310,6 @@ class LLMGenerationManager:
         final_batch.meta_info['valid_search_stats'] = valid_search_stats.tolist()
         
         print("ACTIVE_TRAJ_NUM:", active_num_list)
-        breakpoint()
         return final_batch
 
     def _create_reflect_mask(self, input_ids: torch.Tensor, ground_truth: List[str]) -> torch.Tensor:
