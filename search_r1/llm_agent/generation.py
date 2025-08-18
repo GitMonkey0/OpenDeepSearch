@@ -237,6 +237,7 @@ class LLMGenerationManager:
                 init_input_ids,
                 output_ids
             ])
+            breakpoint()
             reflect_output_ids_list = []
             for step in range(self.config.max_turns + 1):
                 if not reflect_mask.sum():
@@ -282,7 +283,7 @@ class LLMGenerationManager:
                 curr_reflect_mask = torch.tensor([not done for done in dones], dtype=torch.bool)
                 reflect_mask = reflect_mask * curr_reflect_mask
 
-            reflect_output_ids = self.tensor_fn.concatenate_with_padding(output_ids_list, pad_to_left=False)
+            reflect_output_ids = self.tensor_fn.concatenate_with_padding(reflect_output_ids_list, pad_to_left=False)
             reflect_output_ids = self._cut_to_effective_len(reflect_output_ids, cut_off="right")
 
             final_output_ids = self.tensor_fn.concatenate_with_padding([output_ids, reflect_output_ids], pad_to_left=False)
@@ -310,7 +311,7 @@ class LLMGenerationManager:
         final_batch.meta_info['valid_search_stats'] = valid_search_stats.tolist()
         
         print("ACTIVE_TRAJ_NUM:", active_num_list)
-        
+        breakpoint()
         return final_batch
 
     def _create_reflect_mask(self, input_ids: torch.Tensor, ground_truth: List[str]) -> torch.Tensor:
@@ -336,23 +337,54 @@ class LLMGenerationManager:
 
         return reflect_mask
     
+    # def _create_reflect(self, output_ids: torch.Tensor, reflect_mask: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     Create a token for the reflect phase.
+    #     """
+    #     reflect_str = '\n<reflect>\nMaybe I should think, search and answer again?\n</reflect>\n'
+    #     decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+    #     new_ids = []
+    #     pad_id = self.tokenizer.pad_token_id
+    #     for text, mask in zip(decoded, reflect_mask):
+    #         if mask:
+    #             text = re.sub(r'<answer>.*?</answer>\s*$', '', text, flags=re.DOTALL) + reflect_str
+    #         new_ids.append(self.tokenizer.encode(text, add_special_tokens=False))
+
+    #     max_len = max(len(ids) for ids in new_ids)
+    #     out = torch.full((output_ids.size(0), max_len), pad_id,
+    #                     dtype=torch.long)
+    #     for i, ids in enumerate(new_ids):
+    #         out[i, :len(ids)] = torch.tensor(ids, dtype=torch.long)
+    #     return out
+
     def _create_reflect(self, output_ids: torch.Tensor, reflect_mask: torch.Tensor) -> torch.Tensor:
         """
-        Create a token for the reflect phase.
+        If the text ends with <answer>...</answer> (with trailing spaces):
+            1. remove that answer block;
+            2. then remove the last <think>...</think> (with trailing spaces) if present;
+        else:
+            just append reflect_str.
         """
-        reflect_str = '\n<reflect>\nMaybe I should think, search and answer again?\n</reflect>\n'
-        decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        reflect_str = '<think>\nWait, let me review my previous response, '
 
-        new_ids = []
-        pad_id = self.tokenizer.pad_token_id
+        decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        new_ids   = []
+        pad_id    = self.tokenizer.pad_token_id
+
+        answer_re = re.compile(r'<answer>.*?</answer>\s*$', re.DOTALL)
+        think_re  = re.compile(r'<think>.*?</think>\s*$',  re.DOTALL)
+
         for text, mask in zip(decoded, reflect_mask):
             if mask:
-                text = re.sub(r'<answer>.*?</answer>\s*$', '', text, flags=re.DOTALL) + reflect_str
+                text, removed_answer = answer_re.subn('', text)   # 步骤1
+                if removed_answer:                                # 只有删了answer才继续删think
+                    text = think_re.sub('', text)                 # 步骤2
+                text += reflect_str                               # 步骤3
             new_ids.append(self.tokenizer.encode(text, add_special_tokens=False))
 
         max_len = max(len(ids) for ids in new_ids)
-        out = torch.full((output_ids.size(0), max_len), pad_id,
-                        dtype=torch.long)
+        out = torch.full((output_ids.size(0), max_len), pad_id, dtype=torch.long)
         for i, ids in enumerate(new_ids):
             out[i, :len(ids)] = torch.tensor(ids, dtype=torch.long)
         return out

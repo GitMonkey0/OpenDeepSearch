@@ -744,14 +744,6 @@ class RayPPOTrainer(object):
                         batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                         batch = batch.union(final_gen_batch_output)
 
-                    ####################
-                    ####################
-
-                    with _timer('reflect', timing_raw):
-                        reward_tensor = self.reward_fn(batch)
-                    ####################
-                    ####################
-
                     # balance the number of valid tokens on each dp rank.
                     # Note that this breaks the order of data inside the batch.
                     # Please take care when you implement group based adv computation such as GRPO and rloo
@@ -787,6 +779,7 @@ class RayPPOTrainer(object):
                             batch = batch.union(reward_tensor)
 
                         # we combine with rule-based rm
+                        breakpoint()
                         reward_tensor = self.reward_fn(batch)
                         batch.batch['token_level_scores'] = reward_tensor
 
