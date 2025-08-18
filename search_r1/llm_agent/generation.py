@@ -334,27 +334,6 @@ class LLMGenerationManager:
                 reflect_mask[i] = True
 
         return reflect_mask
-    
-    # def _create_reflect(self, output_ids: torch.Tensor, reflect_mask: torch.Tensor) -> torch.Tensor:
-    #     """
-    #     Create a token for the reflect phase.
-    #     """
-    #     reflect_str = '\n<reflect>\nMaybe I should think, search and answer again?\n</reflect>\n'
-    #     decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-
-    #     new_ids = []
-    #     pad_id = self.tokenizer.pad_token_id
-    #     for text, mask in zip(decoded, reflect_mask):
-    #         if mask:
-    #             text = re.sub(r'<answer>.*?</answer>\s*$', '', text, flags=re.DOTALL) + reflect_str
-    #         new_ids.append(self.tokenizer.encode(text, add_special_tokens=False))
-
-    #     max_len = max(len(ids) for ids in new_ids)
-    #     out = torch.full((output_ids.size(0), max_len), pad_id,
-    #                     dtype=torch.long)
-    #     for i, ids in enumerate(new_ids):
-    #         out[i, :len(ids)] = torch.tensor(ids, dtype=torch.long)
-    #     return out
 
     def _create_reflect(self, output_ids: torch.Tensor, reflect_mask: torch.Tensor) -> torch.Tensor:
         """
