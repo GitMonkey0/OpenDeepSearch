@@ -337,27 +337,29 @@ class LLMGenerationManager:
 
     def _create_reflect(self, output_ids: torch.Tensor, reflect_mask: torch.Tensor) -> torch.Tensor:
         """
-        If the text ends with <answer>...</answer> (with trailing spaces):
-            1. remove that answer block;
-            2. then remove the last <think>...</think> (with trailing spaces) if present;
-        else:
-            just append reflect_str.
         """
-        reflect_str = '<think>\nWait, let me review my previous response, '
+        reflect_suffix = "\nWait, let me review my previous response, "
+        pad_id = self.tokenizer.pad_token_id
 
         decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-        new_ids   = []
-        pad_id    = self.tokenizer.pad_token_id
+        new_ids = []
 
         answer_re = re.compile(r'<answer>.*?</answer>\s*$', re.DOTALL)
-        think_re  = re.compile(r'<think>.*?</think>\s*$',  re.DOTALL)
+        think_end_re = re.compile(r'(</think>)(\s*)$', re.DOTALL)
 
         for text, mask in zip(decoded, reflect_mask):
-            if mask:
-                text, removed_answer = answer_re.subn('', text)   # 步骤1
-                if removed_answer:                                # 只有删了answer才继续删think
-                    text = think_re.sub('', text)                 # 步骤2
-                text += reflect_str                               # 步骤3
+            if not mask:
+                new_ids.append(self.tokenizer.encode(text, add_special_tokens=False))
+                continue
+
+            text = answer_re.sub('', text)
+
+            match = think_end_re.search(text)
+            if match:
+                text = text[:match.start(1)] + reflect_suffix + text[match.end(2):]
+            else:
+                text = text + "<think>" + reflect_suffix
+
             new_ids.append(self.tokenizer.encode(text, add_special_tokens=False))
 
         max_len = max(len(ids) for ids in new_ids)

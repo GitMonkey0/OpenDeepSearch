@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=0
 export DATA_DIR='data/nq_search'
 
 WAND_PROJECT='Search-R1'
